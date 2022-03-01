@@ -1,0 +1,59 @@
+name: Deploy to AWS ECS
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      aws_ecs_cluster:
+        required: true
+        type: string
+      aws_ecs_service:
+        required: true
+        type: string
+      task_definition:
+        required: true
+        type: string
+      interpolations:
+        required: true
+        type: string
+    secrets:
+      aws_access_key_id:
+        required: true
+      aws_secret_access_key:
+        required: true
+
+jobs:
+  deploy_to_aws_ecs:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ inputs.aws_region }}
+          mask-aws-account-id: no
+
+      - name: Render AWS ECS task definition
+        id: render_task_definition
+        uses: chuhlomin/render-template@v1.2
+        with:
+          template: ${{ inputs.task_definition }}
+          vars: ${{ inputs.interpolations }}
+
+      - name: Write AWS ECS task definition
+        run: |-
+          echo '${{ steps.render_task_definition.outputs.result }}' > ${{ inputs.task_definition }}.rendered
+
+      - name: Deploy AWS ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ inputs.task_definition }}.rendered
+          service: ${{ inputs.aws_ecs_service }}
+          cluster: ${{ inputs.aws_ecs_cluster }}
+          wait-for-service-stability: false
